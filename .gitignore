@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Large Model Weights (Do not push to GitHub)
+*.pth
+*.h5
+*.weights
+checkpoints/
+
+# Datasets and Large Folders
+MIVIA_HEp-2_Images_Dataset/
+data/
+uploads/
+results/
+images for research paper/
+
+# Local/Temporary Files
+scratch/
+*.db
+*.log
+test_dashboard_log.txt
+ana_predictions.db
+
+# OS generated files
+.DS_Store
+Thumbs.db

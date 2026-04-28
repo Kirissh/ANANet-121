@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANA Diagnostic Pipeline</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --primary: #0f172a;
+            --accent: #2563eb;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --danger: #dc2626;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg); color: var(--primary); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+        
+        .container { width: 100%; max-width: 800px; }
+        .card { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 2.5rem; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .step-num { display: inline-block; width: 24px; height: 24px; background: var(--accent); color: white; border-radius: 50%; text-align: center; font-size: 0.75rem; line-height: 24px; font-weight: 700; margin-right: 0.75rem; }
+        h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.5rem; display: flex; align-items: center; }
+
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        .form-group label { font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase; display: block; margin-bottom: 0.3rem; }
+        .form-group input { width: 100%; padding: 0.7rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; }
+
+        .upload-area { border: 2px dashed var(--border); border-radius: 12px; padding: 3rem; text-align: center; cursor: pointer; }
+        .upload-area:hover { border-color: var(--accent); background: #f8fafc; }
+
+        .btn { background: var(--primary); color: #fff; border: none; padding: 1rem 2rem; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.2s; }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .btn-danger { background: var(--danger); }
+
+        .result-box { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        .display-img { width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+        
+        .label-mut { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.2rem; }
+        .val-big { font-size: 1.4rem; font-weight: 800; margin-bottom: 1rem; }
+
+        .intervention-ui { background: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem; display: none; }
+
+        .hidden { display: none !important; }
+        .loader { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- STEP 1 -->
+        <div class="card" id="step1-card">
+            <h2><span class="step-num">1</span> Patient Intake & Specimen Upload</h2>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+                <div class="form-group"><label>Name</label><input type="text" id="pt-name" value="John Doe"></div>
+                <div class="form-group"><label>Case ID</label><input type="text" id="pt-id" value="ANA-2026-B"></div>
+                <div class="form-group"><label>Age/Gen</label><input type="text" id="pt-age" value="34/F"></div>
+                <div class="form-group"><label>POI Division</label>
+                    <select id="grid-size" style="width: 100%; padding: 0.7rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem;">
+                        <option value="1x1" selected>1x1 (Whole Image)</option>
+                        <option value="2x2">2x2 Grid (4 POIs)</option>
+                        <option value="3x3">3x3 Grid (9 POIs)</option>
+                        <option value="3x6">3x6 Grid (18 POIs)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="upload-area" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                <p id="upload-msg" style="color: var(--muted)">Click or Drag specimen image to begin pipeline</p>
+                <input type="file" id="file-input" style="display: none" accept="image/*">
+                <img id="input-preview" style="display: none; max-width: 180px; margin: 1rem auto; border-radius: 8px;">
+            </div>
+            <button class="btn" id="start-btn" style="margin-top: 1.5rem">Initialize AnaNet-121 Pipeline</button>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="card hidden" id="step2-card">
+            <h2><span class="step-num">2</span> AnaNet-121 Analysis & Confidence Mapping</h2>
+            <div class="result-box">
+                <div>
+                    <div class="label-mut">Detected Pattern</div>
+                    <div class="val-big" id="sota-pattern" style="color: var(--accent)">-</div>
+                    <div class="label-mut">Model Confidence</div>
+                    <div class="val-big" id="sota-conf">-</div>
+                    <p style="font-size: 0.85rem; color: var(--muted);" id="sota-char"></p>
+                </div>
+                <div>
+                    <div class="label-mut">Morphology Reasoning (Grad-CAM)</div>
+                    <img class="display-img" id="res-gradcam">
+                </div>
+            </div>
+
+            <div class="intervention-ui" id="intervention-ui">
+                <p style="color: var(--danger); font-weight: 700; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.5rem;">⚠️ Pathologist Oversight Required (Confidence < 70%)</p>
+                <p style="font-size: 0.85rem; margin-bottom: 1rem;">Manual morphology review triggered. Please verify the Grad-CAM heatmap highlights before proceeding to Gemma-4 VLM consensus.</p>
+                <button class="btn btn-danger" id="human-verify">Verify Findings & Proceed</button>
+            </div>
+            
+            <button class="btn" id="go-vlm" style="margin-top: 1.5rem;">Proceed to Gemma-4 VLM Verification</button>
+        </div>
+
+        <!-- STEP 3 -->
+        <div class="card hidden" id="step3-card">
+            <h2><span class="step-num">3</span> Gemma-4 Concordance & Reporting</h2>
+            <div id="vlm-loading" style="text-align: center; padding: 1.5rem;">
+                <div class="loader"></div>
+                <p style="font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem;">Consulting Gemma-4 Cloud for multi-model verification...</p>
+            </div>
+            <div id="vlm-content" class="hidden">
+                <div class="result-box" style="margin-bottom: 1.5rem;">
+                    <div>
+                        <div class="label-mut">Gemma-4 Pattern</div>
+                        <div class="val-big" id="vlm-pattern" style="color: var(--accent)">-</div>
+                    </div>
+                    <div>
+                        <div class="label-mut">Gemma-4 Confidence</div>
+                        <div class="val-big" id="vlm-conf">-</div>
+                    </div>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
+                    <div class="label-mut">Cloud VLM Insight</div>
+                    <p id="vlm-insight" style="font-size: 1.05rem; line-height: 1.5; font-weight: 500; margin-top: 0.3rem;"></p>
+                </div>
+                <button class="btn" id="download-btn">Generate Structured Diagnostic Report</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const preview = document.getElementById('input-preview');
+        let s1 = null, s2 = null;
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                preview.src = re.target.result;
+                preview.style.display = 'block';
+                document.getElementById('upload-msg').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        };
+
+        document.getElementById('start-btn').onclick = async () => {
+            if (!fileInput.files[0]) return;
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+            formData.append('grid_size', document.getElementById('grid-size').value);
+            const res = await fetch('/step1', { method: 'POST', body: formData });
+            s1 = await res.json();
+
+            document.getElementById('step2-card').classList.remove('hidden');
+            document.getElementById('sota-pattern').innerText = s1.class_name.toUpperCase();
+            document.getElementById('sota-conf').innerText = (s1.confidence * 100).toFixed(1) + '%';
+            document.getElementById('sota-char').innerText = s1.characteristic;
+            document.getElementById('res-gradcam').src = s1.gradcam_image;
+
+            if (s1.confidence < 0.70) {
+                document.getElementById('intervention-ui').style.display = 'block';
+                document.getElementById('go-vlm').style.display = 'none';
+            } else {
+                document.getElementById('intervention-ui').style.display = 'none';
+                document.getElementById('go-vlm').style.display = 'block';
+            }
+            window.scrollTo({ top: document.getElementById('step2-card').offsetTop - 20, behavior: 'smooth' });
+        };
+
+        document.getElementById('human-verify').onclick = () => {
+            document.getElementById('go-vlm').style.display = 'block';
+            document.getElementById('intervention-ui').style.opacity = '0.5';
+            document.getElementById('human-verify').disabled = true;
+            document.getElementById('human-verify').innerText = 'Pathologist Verified';
+        };
+
+        document.getElementById('go-vlm').onclick = async () => {
+            document.getElementById('step3-card').classList.remove('hidden');
+            window.scrollTo({ top: document.getElementById('step3-card').offsetTop - 20, behavior: 'smooth' });
+            
+            const res = await fetch('/step2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    image: s1.original_image,
+                    sota_pattern: s1.class_name,
+                    sota_conf: (s1.confidence * 100).toFixed(1) + '%'
+                })
+            });
+            s2 = await res.json();
+            if (s2.error) {
+                document.getElementById('vlm-loading').innerHTML = `<p style="color: var(--danger)">VLM Error: ${s2.error}</p>`;
+                return;
+            }
+            document.getElementById('vlm-loading').classList.add('hidden');
+            document.getElementById('vlm-content').classList.remove('hidden');
+            document.getElementById('vlm-pattern').innerText = s2.classification ? s2.classification.toUpperCase() : 'UNKNOWN';
+            document.getElementById('vlm-conf').innerText = s2.confidence || 'N/A';
+            document.getElementById('vlm-insight').innerText = s2.insight;
+        };
+
+        document.getElementById('download-btn').onclick = async () => {
+            const pt = { name: document.getElementById('pt-name').value, patientId: document.getElementById('pt-id').value, age: document.getElementById('pt-age').value };
+            const res = await fetch('/download_report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ step1: s1, step2: s2, patient_info: pt })
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ANA_Report_${pt.name}.pdf`;
+            a.click();
+        };
+    </script>
+</body>
+</html>
